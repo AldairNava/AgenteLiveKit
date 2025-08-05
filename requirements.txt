@@ -1,0 +1,21 @@
+# LiveKit Agents core con plugin de OpenAI
+livekit-agents[openai]~=1.0
+
+# Plugin de cancelación de ruido
+livekit-plugins-noise-cancellation~=0.2
+
+# Navegador y WebDriver
+selenium
+
+# Husos horarios
+pytz
+
+# Peticiones HTTP
+requests
+
+# Conectores a MySQL
+mysql-connector-python
+PyMySQL
+
+# Variables de entorno
+python-dotenv
