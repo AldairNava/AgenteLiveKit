@@ -9,6 +9,7 @@ from ctypes import wintypes
 from selenium import webdriver
 import socket
 import pymysql
+from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException, ElementNotInteractableException, JavascriptException
 import subprocess
 from pymysql.cursors import DictCursor
 from flask import Flask
@@ -157,6 +158,8 @@ class VicidialAutomation:
         sleep(2)
         if campaign_value == "3006 - PruebaBot":
             xpath = ('/html/body/form/center/table/tbody/tr[5]/td[2]/font/span/select/option[3]')
+        elif campaign_value == "3008 - Campania In BOT":
+            xpath = ('/html/body/form/center/table/tbody/tr[5]/td[2]/font/span/select/option[4]')
         else:
             xpath = ('/html/body/form/center/table/tbody/tr[5]/td[2]/font/span/select/option[2]')
         self.driver.find_element(By.XPATH, xpath).click()
@@ -220,6 +223,41 @@ class VicidialAutomation:
                 print("❎ Verificando si hay popup que cerrar...")
                 self._close_popup()
                 sleep(5)
+
+                if self.config['campaign_value'] == "3008 - Campania In BOT":
+                    xpath = '/html/body/form[1]/span[59]/table/tbody/tr/td/font[2]/a[2]'
+                    xpath2= '/html/body/form[1]/span[59]/table/tbody/tr/td/font[2]/span/table/tbody/tr[2]/td[1]/font/span/a/b'
+                    try:
+                        element = self.driver.find_element(By.XPATH, xpath2)
+                        if element.is_displayed() and element.is_enabled():
+                            element.click()
+                            print("Clic normal exitoso.")
+                        else:
+                            # Si no es interactuable
+                            raise ElementNotInteractableException
+                    except (NoSuchElementException, ElementNotInteractableException, ElementClickInterceptedException):
+                        try:
+                            print("Intentando clic con JavaScript...")
+                            element = self.driver.find_element(By.XPATH, xpath2)
+                            self.driver.execute_script("arguments[0].click();", element)
+                        except (NoSuchElementException, JavascriptException):
+                            print("Elemento no encontrado o clic JS falló.")
+                    try:
+                        element = self.driver.find_element(By.XPATH, xpath)
+                        if element.is_displayed() and element.is_enabled():
+                            element.click()
+                            print("Clic normal exitoso.")
+                        else:
+                            # Si no es interactuable
+                            raise ElementNotInteractableException
+                    except (NoSuchElementException, ElementNotInteractableException, ElementClickInterceptedException):
+                        try:
+                            print("Intentando clic con JavaScript...")
+                            element = self.driver.find_element(By.XPATH, xpath)
+                            self.driver.execute_script("arguments[0].click();", element)
+                        except (NoSuchElementException, JavascriptException):
+                            print("Elemento no encontrado o clic JS falló.")
+                    sleep(2)
 
                 print("🟢 Colocando estado en DISPONIBLE...")
                 self.driver.find_element(By.XPATH,
@@ -308,11 +346,21 @@ class VicidialAutomation:
                     if src == f"http://{IP}/agc/images/agc_live_call_ON.gif":
                         print("📞 Llamada activa detectada")
 
+
+                        # telefono
+                        telefono = self.driver.find_element(By.XPATH, '//*[@id="phone_number"]')
+                        telefono = telefono.get_attribute('value') 
+                        print(f"📞 Teléfono de la llamada: {telefono}")
+
+                        # adress 2
+                        ordenServicio = self.driver.find_element(By.XPATH, '//*[@id="address2"]')
+                        ordenServicio = ordenServicio.get_attribute('value')
+
                         # Extrae la orden
                         orden = self.driver.find_element(By.XPATH, XPATH_ORDEN).get_attribute("value")
-                        # orden='1-223091190425'
+                        # orden='1-222302788330'
                         with open(ORDER_TXT, 'w', encoding='utf-8') as f:
-                            f.write(orden)
+                            f.write(ordenServicio)
                         print(f"➡️ order.txt creado con: {orden}")
                         llamada = True
 

@@ -70,6 +70,10 @@ def on_user_state_changed(ev: UserStateChangedEvent) -> None:
         session_instance.generate_reply(
             user_input="El cliente no ha hablado. Pregunta si sigue en la llamada."
         )
+    if modo_silencio == "crm":
+        session_instance.generate_reply(
+            user_input="Delie al cliente que continuas con el en la llamada que en un momento sale la respuesta del sistema."
+        )
     else:  # reset_modem
         session_instance.generate_reply(
             user_input=(
@@ -144,8 +148,8 @@ class Assistant(Agent):
             instructions=get_instructions(),
             llm=openai.realtime.RealtimeModel(
                 # input_audio_noise_reduction=InputAudioNoiseReduction(type="near_field"),
-                voice="coral",
-                model="gpt-4o-realtime-preview-2025-06-03",
+                voice="marin",
+                model="gpt-realtime",
                 turn_detection=None,
             )
         )
@@ -174,6 +178,7 @@ class Assistant(Agent):
         ingroup: str = "SOME",
     ) -> dict[str, Any]:
         return await transfer_conference(value, ingroup)
+    
     @function_tool(
         name="send_serial",
         description="Reinicia el módem en el back-end y notifica al cliente del resultado",
@@ -183,6 +188,7 @@ class Assistant(Agent):
         modo_silencio = "reset_modem"
 
         async def _serial_task():
+            global modo_silencio
             # 1) Hacer la petición HTTP en hilo de bloqueo
             try:
                 resp = await asyncio.to_thread(
@@ -221,6 +227,61 @@ class Assistant(Agent):
 
         self.session._loop.create_task(_serial_task())
         return {"result": "ok (send_serial lanzado en background)"}
+
+    @function_tool(
+        name="crm_llenado",
+        description="Envía los datos del cliente al CRM y notifica el resultado al usuario.",
+    )
+    async def crm_llenado( self, context: RunContext, nombre: str, nacimiento: str, rfc: str, ingresos: str, ocupacion: str, linea: str, direccion: str, telefono: str ) -> dict[str, Any]:
+        global modo_silencio
+        modo_silencio = "crm"
+        # --- Lógica de background ---
+        async def _crm_task():
+            global modo_silencio
+            print("nombre:",nombre)
+            print("nacimiento:",nacimiento)
+            print("rfc:",rfc)
+            print("ingresos:",ingresos)
+            print("ocupacion:",ocupacion)
+            print("linea:",linea)
+            print("direccion",direccion)
+            print("telefono",telefono)
+            try:
+                resp = await asyncio.to_thread(
+                    requests.post,
+                    "http://localhost:5000/crm_llenado",   # Cambia puerto si es necesario
+                    json={
+                        "nombre": nombre,
+                        "nacimiento": nacimiento,
+                        "rfc": rfc,
+                        "ingresos": ingresos,
+                        "ocupacion": ocupacion,
+                        "linea": linea,
+                        "direccion": direccion,
+                    }
+                )
+                exito = (resp.status_code == 200 and resp.json().get("result") == "ok")
+            except Exception as e:
+                exito = False
+                error = str(e)
+
+            # --- Mensaje según resultado ---
+            if exito:
+                texto = (
+                    f""""Di lo siguiente sin agregar nada mas [¡Buenas noticias! Su línea de crédito fue pre-aprobada.
+                     ¿En que dia y que hora le parece bien que un embajador de PlataCard la visite para entregarle su nueva tarjeta de Credito?] """
+                )
+            else:
+                await asyncio.sleep(20)
+                texto = (
+                    f"""Di lo siguiente sin agregar nada mas [(Señor/Señorita {client_context['NOMBRE_CLIENTE']}), gracias por su tiempo de espera, el sistema me arroja que la respuesta de su 
+                        solicitud será enviada a su número telefónico por medio de un mensaje SMS, por lo que le pido estar al 
+                        pendiente de su celular. ]"""
+                )
+            await self.session.generate_reply(user_input=texto)
+
+        self.session._loop.create_task(_crm_task())
+        return {"result": "ok (crm_llenado lanzado en background)"}
 
 
 async def entrypoint(ctx: agents.JobContext):

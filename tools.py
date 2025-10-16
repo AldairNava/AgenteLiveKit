@@ -10,7 +10,7 @@ import pytz
 import pymysql
 from pymysql.cursors import DictCursor
 
-from instrucciones import update_client_context_from_db,client_context, actualizar_status as actualizar_status_instrucciones
+from instrucciones import client_context
 
 # Carga de configuración inicial
 def _load_config():
@@ -51,10 +51,6 @@ def _load_config():
         print(f"⚠️ No encontré registro para IP {ip_local}; uso config.json")
     return cfg
 
-# Variable global para tipificación pendiente
-global pending_tipificacion
-pending_tipificacion = None
-
 def call_vicidial_tool(function: str, value: str = "1", extra_args: dict = {}) -> dict:
     config = _load_config()
     API_BASE   = "http://192.168.50.121/agc/api.php"
@@ -84,10 +80,6 @@ def call_vicidial_tool(function: str, value: str = "1", extra_args: dict = {}) -
 
     return _sync_call()
 
-# def set_pending_tipificacion(tipificacion: str) -> None:
-#     global pending_tipificacion
-#     pending_tipificacion = tipificacion
-
 def execute_pending_tipificacion(pending_tipificacion) -> None:
     if pending_tipificacion is None:
         print("⚠️ No hay tipificación pendiente para ejecutar")
@@ -112,13 +104,22 @@ def execute_pending_tipificacion(pending_tipificacion) -> None:
         external_status_OSCOM()
     else:
         print("⚠️ Tipificación no reconocida:", pending_tipificacion)
+        pending_tipificacion='SCCCUE'
+        external_status_SCCCUE()
 
-    actualizar_status_instrucciones(client_context["NUMERO_ORDEN"],'Completada')
+    # actualizar_status_instrucciones(client_context["NUMERO_ORDEN"],'Completada')
     print(f"✅ Tipificación '{pending_tipificacion}' ejecutada correctamente")
 
     pending_tipificacion = None
 
 def insertar_base_not_done_via_api() -> bool:
+    if client_context["FALLA_GENERAL"] in ("1", 1):
+        motivoOrden="Termina falla general"
+    else:
+        motivoOrden="Servicio se reestablece solo"
+
+    print("motivo:",motivoOrden)
+    print(f"FALLA_GENERAL=:",client_context["FALLA_GENERAL"])
     config = _load_config()
     tz_cdmx = pytz.timezone('America/Mexico_City')
     ahora = datetime.now(tz_cdmx).strftime("%Y-%m-%d %H:%M:%S")
@@ -130,6 +131,7 @@ def insertar_base_not_done_via_api() -> bool:
         "NumOrden":     client_context.get("NUMERO_ORDEN"),
         "Tipo":         client_context.get("Tipo"),
         "MotivoOrden":  client_context.get("MotivoOrden"),
+        "MotivoOrden":  motivoOrden,
         "Source":       "IA AGENT",
         "time_carga":   ahora,
         "Status":       "Registro pendiente",
@@ -209,7 +211,7 @@ async def external_pause_and_flag_exit(
 
     # Prepara registro
     registro = client_context.copy()
-    for k in ("Colonia", "Status", "status"):
+    for k in ("Colonia", "Status", "status","FALLA_GENERAL","SEGUIMIENTO"):
         registro.pop(k, None)
     registro.update({
         "status": "Pendiente",
@@ -245,7 +247,7 @@ async def external_pause_and_flag_exit(
         return {"result": "error", "error": str(e)}
     
     print("Motivo registrado:", cn_motivo)
-    actualizar_status_instrucciones(registro["NUMERO_ORDEN"],'Completada')
+    # actualizar_status_instrucciones(registro["NUMERO_ORDEN"],'Completada')
     external_hangup()
     execute_pending_tipificacion(tipificacion)
 
@@ -314,7 +316,7 @@ def actualizar_stauts(status: str) -> None:
 
 
 # ordenes={
-#     '1-224082680428'
+#     '1-230105858309',
 # }
 # for orden in ordenes:
 #     update_client_context_from_db(orden)
